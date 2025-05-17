@@ -1,14 +1,26 @@
 import torch
 import tensorflow as tf
 import numpy as np
-from train import CVIDataset, transform
+from torchvision import models, transforms
+from train import CVIDataset
 
 def convert_to_tflite(model_path, output_path):
-    # Load PyTorch model
-    model = torch.load(model_path, map_location='cpu')
+    # Initialize the same model architecture as in training
+    model = models.mobilenet_v2(pretrained=False)
+    model.classifier[1] = torch.nn.Linear(model.last_channel, 3)  # 3 classes
+    
+    # Load the state dictionary
+    model.load_state_dict(torch.load(model_path, map_location='cpu'))
     model.eval()
     
-    # Create a sample input
+    # Create a sample input with the same preprocessing as validation
+    val_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    
+    # Create a sample input tensor with the correct dimensions
     sample_input = torch.randn(1, 3, 224, 224)
     
     # Export to ONNX
@@ -39,4 +51,5 @@ def convert_to_tflite(model_path, output_path):
     print(f"Model exported to {output_path}")
 
 if __name__ == '__main__':
-    convert_to_tflite('models/checkpoints/cvi_model.pth', 'models/cvi_model.tflite') 
+    # Use the same path as in train.py for the best model
+    convert_to_tflite('models/checkpoints/best_model.pth', 'models/cvi_model.tflite') 

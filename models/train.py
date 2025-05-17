@@ -18,7 +18,7 @@ class CVIDataset(Dataset):
         self.classes = ['normal', 'moderate', 'severe']
         self.class_mapping = {
             '1': 0,  # normal (C0)
-            '2': 0,  # normal (C1)
+            '2': 1,  # moderate (C1, C2,)
             '3': 1,  # moderate (C2, C3)
             '4': 2,  # severe (C4)
             '5': 2   # severe (C5, C6)
@@ -55,16 +55,17 @@ class CVIDataset(Dataset):
             
         return image, label
 
-def train_model(model, train_loader, criterion, optimizer, num_epochs=20):
-    model.train()
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=20):
     best_acc = 0.0
     
     for epoch in range(num_epochs):
+        # Training phase
+        model.train()
         running_loss = 0.0
         correct = 0
         total = 0
         
-        pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{num_epochs}')
+        pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{num_epochs} [Train]')
         for images, labels in pbar:
             images, labels = images.to(device), labels.to(device)
             
@@ -81,19 +82,45 @@ def train_model(model, train_loader, criterion, optimizer, num_epochs=20):
             
             pbar.set_postfix({'loss': running_loss/total, 'acc': 100.*correct/total})
         
-        epoch_acc = 100.*correct/total
-        print(f'Epoch {epoch+1} - Loss: {running_loss/len(train_loader):.4f}, '
-              f'Accuracy: {epoch_acc:.2f}%')
+        train_acc = 100.*correct/total
+        train_loss = running_loss/len(train_loader)
         
-        # Save best model
-        if epoch_acc > best_acc:
-            best_acc = epoch_acc
+        # Validation phase
+        model.eval()
+        val_loss = 0.0
+        val_correct = 0
+        val_total = 0
+        
+        with torch.no_grad():
+            pbar = tqdm(val_loader, desc=f'Epoch {epoch+1}/{num_epochs} [Val]')
+            for images, labels in pbar:
+                images, labels = images.to(device), labels.to(device)
+                
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                
+                val_loss += loss.item()
+                _, predicted = outputs.max(1)
+                val_total += labels.size(0)
+                val_correct += predicted.eq(labels).sum().item()
+                
+                pbar.set_postfix({'loss': val_loss/val_total, 'acc': 100.*val_correct/val_total})
+        
+        val_acc = 100.*val_correct/val_total
+        val_loss = val_loss/len(val_loader)
+        
+        print(f'Epoch {epoch+1} - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%, '
+              f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2f}%')
+        
+        # Save best model based on validation accuracy
+        if val_acc > best_acc:
+            best_acc = val_acc
             torch.save(model.state_dict(), 'models/checkpoints/best_model.pth')
-            print(f'New best model saved with accuracy: {best_acc:.2f}%')
+            print(f'New best model saved with validation accuracy: {best_acc:.2f}%')
 
 def main():
     # Data transforms
-    transform = transforms.Compose([
+    train_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(10),
@@ -102,9 +129,28 @@ def main():
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
     
-    # Create dataset and dataloader
-    dataset = CVIDataset('data/CVI-img-datasets-2/imagedata', transform=transform)
-    train_loader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=4)
+    val_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    
+    # Create dataset
+    full_dataset = CVIDataset('data/CVI-img-datasets-2/imagedata', transform=train_transform)
+    
+    # Split dataset into train and validation sets
+    train_size = int(0.8 * len(full_dataset))
+    val_size = len(full_dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
+    
+    # Update transform for validation dataset
+    val_dataset.dataset.transform = val_transform
+    
+    # Create dataloaders
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
+    
+    print(f"Training on {train_size} samples, validating on {val_size} samples")
     
     # Load pretrained MobileNetV2
     model = models.mobilenet_v2(pretrained=True)
@@ -116,7 +162,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
     # Train
-    train_model(model, train_loader, criterion, optimizer)
+    train_model(model, train_loader, val_loader, criterion, optimizer)
     
     # Save final model
     torch.save(model.state_dict(), 'models/checkpoints/final_model.pth')

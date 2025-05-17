@@ -8,6 +8,8 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+# from dataset import CVIDataset
+from segment_leg import segment_leg  # Import the segmentation function
 
 # Set random seed for reproducibility
 random.seed(42)
@@ -163,8 +165,77 @@ def visualize_predictions(images, predictions, true_labels, class_names, image_p
                 f.write("-" * 50 + "\n")
         print(f"Misclassified report saved to 'models/misclassified_report.txt'")
 
+def predict_single_image(model, image_path, class_names, transform):
+    """Run inference on a single image and visualize the result"""
+    # Segment the leg first
+    segmented_dir = os.path.dirname(image_path)
+    segmented_filename = f"{os.path.splitext(os.path.basename(image_path))[0]}_segmented.jpg"
+    segmented_path = os.path.join(segmented_dir, segmented_filename)
+    
+    # Segment the leg
+    try:
+        segmented_image = segment_leg(image_path, segmented_path)
+        print(f"Segmented image saved to {segmented_path}")
+        # Use the segmented image for inference
+        image_for_inference = segmented_image
+    except Exception as e:
+        print(f"Segmentation failed: {e}. Using original image.")
+        image_for_inference = Image.open(image_path).convert('RGB')
+    
+    # Preprocess the image
+    input_tensor = transform(image_for_inference).unsqueeze(0).to(device)
+    
+    # Run inference
+    model.eval()
+    with torch.no_grad():
+        output = model(input_tensor)
+        probabilities = torch.nn.functional.softmax(output, dim=1)[0]
+        _, predicted_class = output.max(1)
+    
+    # Convert to numpy for visualization
+    probs = probabilities.cpu().numpy()
+    pred_class = predicted_class.item()
+    
+    # Visualize
+    plt.figure(figsize=(15, 6))
+    
+    # Display original image
+    plt.subplot(1, 3, 1)
+    orig_img = np.array(Image.open(image_path).convert('RGB'))
+    plt.imshow(orig_img)
+    plt.title("Original Image")
+    plt.axis('off')
+    
+    # Display segmented image
+    plt.subplot(1, 3, 2)
+    seg_img = np.array(image_for_inference)
+    plt.imshow(seg_img)
+    plt.title(f"Segmented Image\nPrediction: {class_names[pred_class]}")
+    plt.axis('off')
+    
+    # Display probability bar chart
+    plt.subplot(1, 3, 3)
+    bars = plt.bar(range(len(class_names)), probs)
+    plt.xticks(range(len(class_names)), class_names, rotation=45)
+    plt.xlabel('Class')
+    plt.ylabel('Probability')
+    plt.title('Class Probabilities')
+    
+    # Highlight the predicted class
+    bars[pred_class].set_color('red')
+    
+    plt.tight_layout()
+    plt.savefig('models/single_image_prediction.png')
+    print(f"Single image prediction saved to 'models/single_image_prediction.png'")
+    
+    # Print prediction details
+    print(f"\nPrediction for {image_path}:")
+    print(f"Predicted class: {class_names[pred_class]}")
+    for i, class_name in enumerate(class_names):
+        print(f"{class_name}: {probs[i]*100:.2f}%")
+
 def main():
-    # Data transforms (no augmentation for testing)
+    # Data transforms (match the validation transforms from training)
     test_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -193,8 +264,15 @@ def main():
     model = model.to(device)
     
     # Evaluate and visualize
-    images, predictions, true_labels, image_paths = evaluate_model(model, test_loader)
-    visualize_predictions(images, predictions, true_labels, dataset.classes, image_paths)
+    # images, predictions, true_labels, image_paths = evaluate_model(model, test_loader)
+    # visualize_predictions(images, predictions, true_labels, dataset.classes, image_paths)
+    
+    # Run inference on a single test image
+    test_img_path = 'models/test_img.jpg'
+    if os.path.exists(test_img_path):
+        predict_single_image(model, test_img_path, dataset.classes, test_transform)
+    else:
+        print(f"Error: Test image not found at {test_img_path}")
 
 if __name__ == '__main__':
     main() 
