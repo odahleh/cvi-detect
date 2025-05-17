@@ -20,90 +20,40 @@ class _CameraViewState extends State<CameraView> {
   ClassificationResult? _classificationResult;
   final ImageClassifier _classifier = ImageClassifier();
   bool _isSimulator = false;
+  bool _cameraInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _checkPlatformAndInitialize();
+    // Don't automatically launch camera on initialization
+    // Instead, wait for explicit user action
+    _checkSimulator();
   }
   
-  Future<void> _checkPlatformAndInitialize() async {
+  Future<void> _checkSimulator() async {
+    // Simple check for simulator - not opening camera automatically
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      await _checkIfSimulator();
+      setState(() {
+        // We'll assume it's not a simulator for now
+        _isSimulator = false;
+        _cameraInitialized = true;
+      });
     } else {
-      // Not iOS, wait for build to complete before taking photo
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _takePhoto();
+      setState(() {
+        _isSimulator = false;
+        _cameraInitialized = true;
       });
     }
   }
-  
-  Future<void> _checkIfSimulator() async {
-    // This check isn't perfect but generally works for iOS simulators
-    try {
-      // Try to access camera availability instead of directly opening camera
-      _isSimulator = !await _picker.pickImage(
-          source: ImageSource.camera).then((_) => true).catchError((_) => false);
-      
-      if (_isSimulator) {
-        if (mounted) {
-          setState(() {});
-          // Show alert about simulator limitations
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showSimulatorAlert();
-          });
-        }
-      } else {
-        // Real device - wait for build to complete before taking photo
-        if (mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _takePhoto();
-          });
-        }
-      }
-    } catch (e) {
-      // If any error occurs, treat as real device but show message
-      if (mounted) {
-        setState(() {
-          _isSimulator = false;
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _takePhoto();
-        });
-      }
-    }
-  }
-  
-  void _showSimulatorAlert() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Simulator Detected'),
-        content: const Text(
-          'Camera is not available in iOS simulators. Would you like to select an image from the gallery instead?'
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop(); // Go back to previous screen
-            },
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _pickFromGallery();
-            },
-            child: const Text('Use Gallery'),
-          ),
-        ],
-      ),
-    );
-  }
-  
+
   Future<void> _pickFromGallery() async {
+    if (_isProcessing) return;
+    
     try {
+      setState(() {
+        _isProcessing = true;
+      });
+      
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
       );
@@ -111,23 +61,27 @@ class _CameraViewState extends State<CameraView> {
       if (image != null) {
         setState(() {
           _imageFile = File(image.path);
-          _isProcessing = true;
           _classificationResult = null;
         });
         
         // Process the image
         final result = await _classifier.classifyImage(_imageFile);
         
+        if (!mounted) return;
+        
         setState(() {
           _classificationResult = result;
           _isProcessing = false;
         });
       } else {
-        // User canceled gallery picker, go back
+        // User canceled gallery picker
         if (!mounted) return;
-        Navigator.of(context).pop();
+        setState(() {
+          _isProcessing = false;
+        });
       }
     } catch (e) {
+      debugPrint("Gallery error: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${e.toString()}')),
@@ -139,6 +93,8 @@ class _CameraViewState extends State<CameraView> {
   }
 
   Future<void> _takePhoto() async {
+    if (_isProcessing) return;
+    
     try {
       // Show loading state while accessing camera
       setState(() {
@@ -147,7 +103,6 @@ class _CameraViewState extends State<CameraView> {
       
       final XFile? image = await _picker.pickImage(
         source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
       );
       
       if (image != null) {
@@ -166,16 +121,14 @@ class _CameraViewState extends State<CameraView> {
           _isProcessing = false;
         });
       } else {
-        // User canceled the camera, go back if this was initial load
+        // User canceled the camera
         if (!mounted) return;
         setState(() {
           _isProcessing = false;
         });
-        if (_imageFile == null) {
-          Navigator.of(context).pop();
-        }
       }
     } catch (e) {
+      debugPrint("Camera error: $e");
       if (!mounted) return;
       setState(() {
         _isProcessing = false;
@@ -191,7 +144,6 @@ class _CameraViewState extends State<CameraView> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                Navigator.of(context).pop(); // Go back to previous screen
               },
               child: const Text('Cancel'),
             ),
@@ -214,12 +166,6 @@ class _CameraViewState extends State<CameraView> {
       _classificationResult = null;
       _isProcessing = false;
     });
-    
-    if (_isSimulator) {
-      _pickFromGallery();
-    } else {
-      _takePhoto();
-    }
   }
 
   @override
@@ -239,24 +185,25 @@ class _CameraViewState extends State<CameraView> {
               )
             else
               Positioned.fill(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _isSimulator ? 'Select an image from gallery' : 
-                                      _isProcessing ? 'Accessing camera...' : 'Camera initializing...',
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                      if (_isProcessing)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 16.0),
-                          child: Text(
-                            'This may take a moment',
-                            style: TextStyle(color: Colors.white70, fontSize: 14),
-                          ),
+                child: Container(
+                  color: Colors.black87,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.camera_alt,
+                          size: 64,
+                          color: Colors.white.withOpacity(0.6),
                         ),
-                    ],
+                        const SizedBox(height: 24),
+                        Text(
+                          _isProcessing ? 'Processing...' : 'Tap the button below to take a picture',
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -307,38 +254,53 @@ class _CameraViewState extends State<CameraView> {
                 ),
               ),
             
-            // Bottom camera button
+            // Bottom buttons
             Positioned(
               bottom: 32,
               left: 0,
               right: 0,
-              child: Center(
-                child: GestureDetector(
-                  onTap: _imageFile == null ? 
-                    (_isSimulator ? _pickFromGallery : null) : 
-                    _retake,
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _imageFile == null ? 
-                        (_isSimulator ? Colors.blue : Colors.grey) : 
-                        Colors.yellow,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Gallery button
+                  GestureDetector(
+                    onTap: _isProcessing ? null : _pickFromGallery,
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.3),
+                      ),
+                      child: const Icon(
+                        Icons.photo_library,
+                        size: 30,
+                        color: Colors.white,
+                      ),
                     ),
-                    child: _imageFile == null 
-                        ? Icon(
-                            _isSimulator ? Icons.photo_library : null,
-                            size: 40,
-                            color: Colors.white,
-                          )
-                        : const Icon(
-                            Icons.refresh_rounded,
-                            size: 40,
-                            color: Colors.black,
-                          ),
                   ),
-                ),
+                  
+                  // Camera button
+                  GestureDetector(
+                    onTap: _isProcessing ? null : (_imageFile == null ? _takePhoto : _retake),
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _imageFile == null ? Colors.white : Colors.yellow,
+                      ),
+                      child: Icon(
+                        _imageFile == null ? Icons.camera_alt : Icons.refresh_rounded,
+                        size: 40,
+                        color: _imageFile == null ? Colors.black : Colors.black,
+                      ),
+                    ),
+                  ),
+                  
+                  // Placeholder for symmetry
+                  const SizedBox(width: 60, height: 60),
+                ],
               ),
             ),
             

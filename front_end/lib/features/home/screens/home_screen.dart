@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../models/leg_stats.dart';
 import '../widgets/leg_card_view.dart';
-import '../../scan/screens/camera_view.dart';
+import '../../cvi_detection/screens/capture_screen.dart';
 
 /// Main home screen showing leg health information
 class HomeScreen extends StatefulWidget {
@@ -36,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showCamera() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const CameraView()),
+      MaterialPageRoute(builder: (context) => const CaptureScreen()),
     );
   }
 
