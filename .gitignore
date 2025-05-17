@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.env
+pip-log.txt
+pip-delete-this-directory.txt
+.ipynb_checkpoints
+
+# PyTorch/ML specific
+*.pth
+*.onnx
+*.h5
+*.tflite
+*.pt
+models/checkpoints/
+models/prediction_visualization.png
+models/confusion_matrix.png
+models/misclassified_report.txt
+models/tf_model/
+*.onnx
+
+# Dataset related
+data/*
+!data/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Debug / logs
+logs/
+*.log 
