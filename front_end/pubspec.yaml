@@ -41,6 +41,8 @@ dependencies:
   image_picker: ^1.0.7
   http: ^1.2.1
   http_parser: ^4.0.2
+  
+  # Authentication dependencies are now mocked
 
 dev_dependencies:
   flutter_test:

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'shared/theme.dart';
-import 'features/home/screens/home_screen.dart';
+import 'features/auth/widgets/auth_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,7 +15,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
   
-  runApp(const VenaCuraApp());
+  runApp(const ProviderScope(child: VenaCuraApp()));
 }
 
 class VenaCuraApp extends StatelessWidget {
@@ -62,7 +63,7 @@ class VenaCuraApp extends StatelessWidget {
         ),
       ),
       themeMode: ThemeMode.system, // System default
-      home: const HomeScreen(),
+      home: const AuthWrapper(),
     );
   }
 } 
