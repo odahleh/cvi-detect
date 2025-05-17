@@ -24,14 +24,25 @@ class _CameraViewState extends State<CameraView> {
   @override
   void initState() {
     super.initState();
-    _checkIfSimulator();
+    _checkPlatformAndInitialize();
+  }
+  
+  Future<void> _checkPlatformAndInitialize() async {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await _checkIfSimulator();
+    } else {
+      // Not iOS, wait for build to complete before taking photo
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _takePhoto();
+      });
+    }
   }
   
   Future<void> _checkIfSimulator() async {
     // This check isn't perfect but generally works for iOS simulators
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      // Using physical characteristics to guess if it's a simulator
-      _isSimulator = !await ImagePicker().getImageFromSource(
+    try {
+      // Try to access camera availability instead of directly opening camera
+      _isSimulator = !await _picker.pickImage(
           source: ImageSource.camera).then((_) => true).catchError((_) => false);
       
       if (_isSimulator) {
@@ -43,12 +54,23 @@ class _CameraViewState extends State<CameraView> {
           });
         }
       } else {
-        // Start camera on real device
-        _takePhoto();
+        // Real device - wait for build to complete before taking photo
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _takePhoto();
+          });
+        }
       }
-    } else {
-      // Not iOS, so just take the photo
-      _takePhoto();
+    } catch (e) {
+      // If any error occurs, treat as real device but show message
+      if (mounted) {
+        setState(() {
+          _isSimulator = false;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _takePhoto();
+        });
+      }
     }
   }
   
@@ -118,38 +140,71 @@ class _CameraViewState extends State<CameraView> {
 
   Future<void> _takePhoto() async {
     try {
+      // Show loading state while accessing camera
+      setState(() {
+        _isProcessing = true;
+      });
+      
       final XFile? image = await _picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
       );
       
       if (image != null) {
+        if (!mounted) return;
         setState(() {
           _imageFile = File(image.path);
-          _isProcessing = true;
           _classificationResult = null;
         });
         
         // Process the image
         final result = await _classifier.classifyImage(_imageFile);
         
+        if (!mounted) return;
         setState(() {
           _classificationResult = result;
           _isProcessing = false;
         });
       } else {
-        // User canceled the camera, go back
+        // User canceled the camera, go back if this was initial load
         if (!mounted) return;
-        Navigator.of(context).pop();
+        setState(() {
+          _isProcessing = false;
+        });
+        if (_imageFile == null) {
+          Navigator.of(context).pop();
+        }
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
       setState(() {
         _isProcessing = false;
       });
+      
+      // Show error and option to use gallery instead
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Camera Error'),
+          content: Text('Could not access camera: ${e.toString()}\n\nWould you like to select an image from gallery instead?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Go back to previous screen
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _pickFromGallery();
+              },
+              child: const Text('Use Gallery'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -185,9 +240,23 @@ class _CameraViewState extends State<CameraView> {
             else
               Positioned.fill(
                 child: Center(
-                  child: Text(
-                    _isSimulator ? 'Select an image from gallery' : 'Preparing camera...',
-                    style: const TextStyle(color: Colors.white),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _isSimulator ? 'Select an image from gallery' : 
+                                      _isProcessing ? 'Accessing camera...' : 'Camera initializing...',
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      if (_isProcessing)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 16.0),
+                          child: Text(
+                            'This may take a moment',
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),

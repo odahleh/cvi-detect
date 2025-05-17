@@ -1,0 +1,3 @@
+// Custom app configuration
+// Change "io.yourusername.cvidetect" to your preferred unique bundle ID
+PRODUCT_BUNDLE_IDENTIFIER = io.omardahleh.cvidetect 
