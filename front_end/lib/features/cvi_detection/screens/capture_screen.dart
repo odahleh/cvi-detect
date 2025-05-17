@@ -81,27 +81,21 @@ class _CaptureScreenState extends State<CaptureScreen> {
         
         if (!mounted) return;
         
-        // Navigate to the appropriate result screen based on severity
+        // Navigate to the appropriate result screen based on the severity
         switch (result.severity) {
           case CVISeverity.normal:
             Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) => NormalResultScreen(result: result),
-              ),
+              MaterialPageRoute(builder: (context) => NormalResultScreen(result: result)),
             );
             break;
           case CVISeverity.moderate:
             Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) => ModerateResultScreen(result: result),
-              ),
+              MaterialPageRoute(builder: (context) => ModerateResultScreen(result: result)),
             );
             break;
           case CVISeverity.severe:
             Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) => SevereResultScreen(result: result),
-              ),
+              MaterialPageRoute(builder: (context) => SevereResultScreen(result: result)),
             );
             break;
         }

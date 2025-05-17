@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/leg_stats.dart';
-import '../widgets/leg_card_view.dart';
-import '../../cvi_detection/screens/capture_screen.dart';
+import '../widgets/leg_scan_widget.dart';
+import '../widgets/swelling_chart_card.dart';
 import '../../auth/providers/user_provider.dart';
 
 /// Main home screen showing leg health information
@@ -36,10 +36,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   
   final dailyStats = const LegDailyStats();
 
-  void _showCamera() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const CaptureScreen()),
+  void _handleScanComplete(String result) {
+    // Handle the scan result
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Scan result: $result'),
+        duration: const Duration(seconds: 3),
+      ),
     );
+    
+    // In a real app, you would update the leg indicators based on the scan result
   }
 
   void _signOut() {
@@ -106,25 +112,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
               
-              // Left leg card
+              // Leg AI Scan widget
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: LegCardView(
-                  legName: "Left leg",
-                  onCameraPressed: _showCamera,
-                  indicators: leftLegIndicators,
-                  dailyStats: dailyStats,
+                child: LegScanWidget(
+                  onScanComplete: _handleScanComplete,
                 ),
               ),
               
-              // Right leg card
+              // Swelling Chart Card
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: LegCardView(
-                  legName: "Right leg",
-                  onCameraPressed: _showCamera,
-                  indicators: rightLegIndicators,
-                  dailyStats: dailyStats,
+                child: const SwellingChartCard(),
+              ),
+              
+              // Health metrics section
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Health Overview",
+                      style: GoogleFonts.manrope(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Daily Activity",
+                      style: GoogleFonts.manrope(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Card(
+                      elevation: 1,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          children: [
+                            _buildMetricRow("Sedentary Hours", dailyStats.sedentaryHours),
+                            _buildMetricRow("Leg Elevation", dailyStats.legElevation),
+                            _buildMetricRow("Standing Time", dailyStats.standingTime),
+                            _buildMetricRow("Pain Level", dailyStats.painLevel),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               
@@ -133,6 +171,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+  
+  Widget _buildMetricRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.manrope(
+              fontSize: 14,
+              color: Colors.black87,
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.manrope(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

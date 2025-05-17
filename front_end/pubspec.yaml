@@ -41,6 +41,7 @@ dependencies:
   image_picker: ^1.0.7
   http: ^1.2.1
   http_parser: ^4.0.2
+  fl_chart: ^0.65.0
   
   # Authentication dependencies are now mocked
 

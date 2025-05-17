@@ -4,6 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/image_classifier.dart';
 import '../../../models/classification_result.dart';
+import '../../../features/cvi_detection/screens/normal_result_screen.dart';
+import '../../../features/cvi_detection/screens/moderate_result_screen.dart';
+import '../../../features/cvi_detection/screens/severe_result_screen.dart';
+import '../../../features/cvi_detection/models/cvi_result.dart';
 
 /// Screen for capturing and analyzing leg images
 class CameraView extends StatefulWidget {
@@ -69,10 +73,17 @@ class _CameraViewState extends State<CameraView> {
         
         if (!mounted) return;
         
+        // Update UI to not processing
         setState(() {
-          _classificationResult = result;
           _isProcessing = false;
+          _classificationResult = result;
         });
+        
+        // Navigate to result screen if we have a result
+        if (result != null) {
+          await Future.delayed(Duration.zero); // Ensure state is updated before navigation
+          _navigateToResultScreen(result);
+        }
       } else {
         // User canceled gallery picker
         if (!mounted) return;
@@ -116,10 +127,18 @@ class _CameraViewState extends State<CameraView> {
         final result = await _classifier.classifyImage(_imageFile);
         
         if (!mounted) return;
+        
+        // Update UI to not processing
         setState(() {
-          _classificationResult = result;
           _isProcessing = false;
+          _classificationResult = result;
         });
+        
+        // Navigate to result screen if we have a result
+        if (result != null) {
+          await Future.delayed(Duration.zero); // Ensure state is updated before navigation
+          _navigateToResultScreen(result);
+        }
       } else {
         // User canceled the camera
         if (!mounted) return;
@@ -157,6 +176,72 @@ class _CameraViewState extends State<CameraView> {
           ],
         ),
       );
+    }
+  }
+
+  void _navigateToResultScreen(ClassificationResult result) {
+    // Make probabilities more realistic by distributing values
+    Map<String, double> probabilities = {
+      'normal': 0.1,
+      'moderate': 0.1,
+      'severe': 0.1,
+    };
+    
+    // Set the detected severity to have the highest probability
+    String severityKey = result.severity.toLowerCase();
+    probabilities[severityKey] = result.confidence;
+    
+    // Adjust other probabilities to ensure sum is close to 1.0
+    double remainingProb = 1.0 - result.confidence;
+    double distributedProb = remainingProb / 2;
+    
+    for (String key in probabilities.keys) {
+      if (key != severityKey) {
+        probabilities[key] = distributedProb;
+      }
+    }
+    
+    // Create a CVIResult
+    final cviResult = CVIResult(
+      filename: _imageFile?.path.split('/').last ?? 'scan.jpg',
+      severity: _getSeverityEnum(result.severity),
+      probabilities: probabilities,
+    );
+    
+    // Navigate to the appropriate result screen
+    Widget destinationScreen;
+    
+    switch (result.severity.toLowerCase()) {
+      case 'normal':
+        destinationScreen = NormalResultScreen(result: cviResult);
+        break;
+      case 'moderate':
+        destinationScreen = ModerateResultScreen(result: cviResult);
+        break;
+      case 'severe':
+        destinationScreen = SevereResultScreen(result: cviResult);
+        break;
+      default:
+        // Default to moderate if unknown
+        destinationScreen = ModerateResultScreen(result: cviResult);
+    }
+    
+    // Use pushReplacement to replace the camera screen with the result screen
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => destinationScreen),
+    );
+  }
+  
+  CVISeverity _getSeverityEnum(String severityString) {
+    switch (severityString.toLowerCase()) {
+      case 'normal':
+        return CVISeverity.normal;
+      case 'moderate':
+        return CVISeverity.moderate;
+      case 'severe':
+        return CVISeverity.severe;
+      default:
+        return CVISeverity.normal;
     }
   }
 
@@ -213,44 +298,6 @@ class _CameraViewState extends State<CameraView> {
               const Positioned.fill(
                 child: Center(
                   child: CircularProgressIndicator(color: Colors.white),
-                ),
-              ),
-            
-            // Classification result overlay
-            if (_classificationResult != null && !_isProcessing)
-              Positioned(
-                top: 16,
-                left: 16,
-                right: 16,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(179), // Approximately 0.7 opacity
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Result: ${_classificationResult!.severity}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _classificationResult!.explainer,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tip: ${_classificationResult!.tip}',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             
