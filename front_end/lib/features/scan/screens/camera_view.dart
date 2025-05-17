@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/image_classifier.dart';
 import '../../../models/classification_result.dart';
@@ -18,12 +19,101 @@ class _CameraViewState extends State<CameraView> {
   bool _isProcessing = false;
   ClassificationResult? _classificationResult;
   final ImageClassifier _classifier = ImageClassifier();
+  bool _isSimulator = false;
 
   @override
   void initState() {
     super.initState();
-    // Immediately start the camera when the view loads
-    _takePhoto();
+    _checkIfSimulator();
+  }
+  
+  Future<void> _checkIfSimulator() async {
+    // This check isn't perfect but generally works for iOS simulators
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // Using physical characteristics to guess if it's a simulator
+      _isSimulator = !await ImagePicker().getImageFromSource(
+          source: ImageSource.camera).then((_) => true).catchError((_) => false);
+      
+      if (_isSimulator) {
+        if (mounted) {
+          setState(() {});
+          // Show alert about simulator limitations
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showSimulatorAlert();
+          });
+        }
+      } else {
+        // Start camera on real device
+        _takePhoto();
+      }
+    } else {
+      // Not iOS, so just take the photo
+      _takePhoto();
+    }
+  }
+  
+  void _showSimulatorAlert() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Simulator Detected'),
+        content: const Text(
+          'Camera is not available in iOS simulators. Would you like to select an image from the gallery instead?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pop(); // Go back to previous screen
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _pickFromGallery();
+            },
+            child: const Text('Use Gallery'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Future<void> _pickFromGallery() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _imageFile = File(image.path);
+          _isProcessing = true;
+          _classificationResult = null;
+        });
+        
+        // Process the image
+        final result = await _classifier.classifyImage(_imageFile);
+        
+        setState(() {
+          _classificationResult = result;
+          _isProcessing = false;
+        });
+      } else {
+        // User canceled gallery picker, go back
+        if (!mounted) return;
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+      setState(() {
+        _isProcessing = false;
+      });
+    }
   }
 
   Future<void> _takePhoto() async {
@@ -69,7 +159,12 @@ class _CameraViewState extends State<CameraView> {
       _classificationResult = null;
       _isProcessing = false;
     });
-    _takePhoto();
+    
+    if (_isSimulator) {
+      _pickFromGallery();
+    } else {
+      _takePhoto();
+    }
   }
 
   @override
@@ -88,11 +183,11 @@ class _CameraViewState extends State<CameraView> {
                 ),
               )
             else
-              const Positioned.fill(
+              Positioned.fill(
                 child: Center(
                   child: Text(
-                    'Preparing camera...',
-                    style: TextStyle(color: Colors.white),
+                    _isSimulator ? 'Select an image from gallery' : 'Preparing camera...',
+                    style: const TextStyle(color: Colors.white),
                   ),
                 ),
               ),
@@ -150,16 +245,24 @@ class _CameraViewState extends State<CameraView> {
               right: 0,
               child: Center(
                 child: GestureDetector(
-                  onTap: _imageFile == null ? null : _retake,
+                  onTap: _imageFile == null ? 
+                    (_isSimulator ? _pickFromGallery : null) : 
+                    _retake,
                   child: Container(
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _imageFile == null ? Colors.grey : Colors.yellow,
+                      color: _imageFile == null ? 
+                        (_isSimulator ? Colors.blue : Colors.grey) : 
+                        Colors.yellow,
                     ),
                     child: _imageFile == null 
-                        ? null 
+                        ? Icon(
+                            _isSimulator ? Icons.photo_library : null,
+                            size: 40,
+                            color: Colors.white,
+                          )
                         : const Icon(
                             Icons.refresh_rounded,
                             size: 40,
