@@ -1,12 +1,12 @@
 {
     "fileFormatVersion": "1.0.0",
     "itemInfoEntries": {
-        "DAACE33D-ECF5-450A-8593-0666B2653612": {
+        "18B7BD18-72F4-46F2-9781-D3878510DD83": {
             "author": "com.apple.CoreML",
             "description": "CoreML Model Specification",
             "name": "model.mlmodel",
             "path": "com.apple.CoreML/model.mlmodel"
         }
     },
-    "rootModelIdentifier": "DAACE33D-ECF5-450A-8593-0666B2653612"
+    "rootModelIdentifier": "18B7BD18-72F4-46F2-9781-D3878510DD83"
 }
